@@ -49,10 +49,15 @@ class PreProcessor(object):
             word_sequence = self.get_data(line)
 
             for word in word_sequence:
-                self.dict[word] = 0
+                if word not in self.dict:
+                    self.dict[word] = 0
+                self.dict[word] += 1
             self.segment.append(word_sequence)
 
-        self.dict = [key for key in self.dict]
+        self.dict = sorted(self.dict.iteritems(), key=lambda d:d[1], reverse=True)
+        self.dict = [x[0] for x in self.dict][:20000]
+        self.dict.append('NONE')
+        #print ' '.join(self.dict)
 
         print "dict size: ", len(self.dict)
         print "set size: ", len(self.segment)
@@ -67,7 +72,7 @@ class PreProcessor(object):
         try:
             return self.dict.index(word)
         except:
-            return 0
+            return self.dict.index("NONE")
 
 
 if __name__ == "__main__":

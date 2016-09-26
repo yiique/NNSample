@@ -15,11 +15,11 @@ class RNNencoder(object):
 
     def __init__(self):
         self.cs = 5             # word window context size
-        self.ne = 56472         # number of emb & input         dict_size + 1
+        self.ne = 20002         # number of emb & input         dict_size + 1
         self.nh = 100           # number of hidden
         self.de = 100           # dimension of emb
-        self.nc = 56471         # number of class & output
-        self.learning_rate = 0.0001
+        self.nc = 20000         # number of class & output
+        self.learning_rate = 0.001
         self.min_size = 5
 
         try:
