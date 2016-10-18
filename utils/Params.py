@@ -18,7 +18,7 @@ class Params(object):
 
         return param
 
-    def uniform(self, size, low=-1, high=1):
+    def uniform(self, size, low=-1.0, high=1.0):
         param = numpy.random.uniform(low, high, size)
 
         if self._if_shared:

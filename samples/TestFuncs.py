@@ -6,6 +6,7 @@ import theano.tensor as T
 import sys
 sys.path.append("..")
 from models.DNNUnit import DNNUnit
+from models.GRUUnit import GRUUnit
 from models.Pooling import Pooling
 from optimal.AdaDelta import AdaDelta
 from utils.Params import Params
@@ -57,14 +58,30 @@ class TestFuncs(object):
 
         return self._theano_fn(func_input, func_y) + self._theano_print()
 
+    # def test_reset_gate(self, wx_size, wh_size, bias_size):
+
+    def test_GRU(self, func_input, wx_size, wh_size, h_size, bias_size):
+        self._func_input = T.matrix('_func_input')
+
+        grn_unit = GRUUnit(wx_size, wh_size, h_size, bias_size)
+        self.params += grn_unit.params
+
+        self._func_output = grn_unit.apply(self._func_input)
+        self._theano_fn = theano.function(inputs=[self._func_input], outputs=self._func_output)
+
+        return self._theano_fn(func_input)
+
 
 if __name__ == '__main__':
     test_funcs = TestFuncs()
 
-    print test_funcs.test_DNNUnit([1, 2, 3, 4], (2, 4), (1, 2))
+    # print test_funcs.test_DNNUnit([1, 2, 3, 4], (2, 4), (1, 2))
 
     # print test_funcs.test_pooling([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 
     # output = test_funcs.test_ada_delta([[1], [1], [1]], 1.5)
     # for _ in output:
     #     print _
+
+    output = test_funcs.test_GRU([[1, 2, 3, 4, 5], [2, 3, 4, 5, 6], [3, 4, 5, 6, 7]], (3, 5), (3, 3), (1, 3), (1, 3))
+    print output

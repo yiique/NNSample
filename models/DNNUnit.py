@@ -16,7 +16,7 @@ class DNNUnit(object):
 
         if bias_size:
             self._if_bias = True
-            self.bias = Params().uniform(bias_size)
+            self.bias = Params().constant(bias_size)
             self.params = [self.weight, self.bias]
         else:
             self._if_bias = False
