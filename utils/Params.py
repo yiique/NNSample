@@ -10,6 +10,14 @@ class Params(object):
     def __init__(self, if_shared=True):
         self._if_shared = if_shared
 
+    def new(self, value):
+        param = numpy.array(value, dtype=theano.config.floatX)
+
+        if self._if_shared:
+            param = theano.shared(value=param)
+
+        return param
+
     def constant(self, size, value=0):
         param = numpy.ones(size, dtype=theano.config.floatX) * value
 
