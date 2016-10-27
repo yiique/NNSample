@@ -9,146 +9,108 @@ from utils.ActivationFunctions import ActivationFunctions
 from utils.Params import Params
 
 
+class Gate(object):
+
+    def __init__(self, input_size, hidden_size, if_bias=True, context=None, activate_type='sigmoid'):
+        if input_size[1] != hidden_size[1]:
+            print "WARNING IN GATE: YOUR INPUT COLUMNS IS NOT EQUAL WITH HIDDEN COLUMNS!"
+
+        self._if_bias = if_bias
+        self._context = context
+        self._activate_type = activate_type
+
+        self.weight_xt = Params().uniform((hidden_size[0], input_size[0]))
+        self.weight_htm1 = Params().uniform((hidden_size[0], hidden_size[0]))
+        self.params = [self.weight_xt, self.weight_htm1]
+        if self._if_bias:
+            self.bias = Params().constant(hidden_size)
+            self.params += [self.bias]
+        if self._context is not None:
+            self.weight_context = Params().uniform((hidden_size[0], hidden_size[0]))
+            self._context = T.dot(self.weight_context, self._context)
+            self.params += [self.weight_context]
+
+    def apply(self, xt, htm1):
+        gate_output = T.dot(self.weight_xt, xt) + T.dot(self.weight_htm1, htm1)
+        if self._if_bias:
+            gate_output += self.bias
+        if self._context is not None:
+            gate_output += self._context
+
+        gate_output = ActivationFunctions().apply(gate_output, self._activate_type)
+
+        return gate_output
+
+
 class GRUUnit(object):
 
-    def __init__(self, wx_size, wh_size, h_size, bias_size=None, context=None):
-        # context is an encode result(matrix) in h_size to add to the gru
-        self.reset_gate = ResetGate(wx_size, wh_size, bias_size, context)
-        self.update_gate = UpdateGate(wx_size, wh_size, bias_size, context)
+    def __init__(self, input_size, hidden_size, if_bias=True, context=None, activate_type='tanh'):
+        if input_size[1] != hidden_size[1]:
+            print "WARNING IN GRUUNIT: YOUR INPUT COLUMNS IS NOT EQUAL WITH HIDDEN COLUMNS!"
 
-        self.weight_xt_candidate = Params().uniform(wx_size)
-        self.weight_htm1_candidate = Params().uniform(wh_size)
-        self.hidden0 = Params().constant(h_size)
+        self._if_bias = if_bias
+        self._context = context
+        self._activate_type = activate_type
 
+        self.reset_gate = Gate(input_size, hidden_size, if_bias, context)
+        self.update_gate = Gate(input_size, hidden_size, if_bias, context)
+        self.weight_xt = Params().uniform((hidden_size[0], input_size[0]))
+        self.weight_htm1 = Params().uniform((hidden_size[0], hidden_size[0]))
+        self.hidden0 = Params().constant(hidden_size)
         self.params = self.reset_gate.params + self.update_gate.params + \
-            [self.weight_xt_candidate, self.weight_htm1_candidate, self.hidden0]
+            [self.weight_xt, self.weight_htm1, self.hidden0]
 
-        if bias_size is not None:
-            self._if_bias = True
-            self.bias = Params().constant(bias_size)
-            self.params.append(self.bias)
-        else:
-            self._if_bias = False
+        if self._if_bias:
+            self.bias = Params().constant(hidden_size)
+            self.params += [self.bias]
+        if self._context is not None:
+            self.weight_context = Params().uniform((hidden_size[0], hidden_size[0]))
+            self._context = T.dot(self.weight_context, self._context)
+            self.params += [self.weight_context]
 
-        if context is not None:
-            self._if_context = True
-            self.weight_context = Params().uniform(wh_size)
-            self.context = T.dot(Params().new(context), self.weight_context)
-            # self.context = T.dot(self.weight_context, Params().new(context)).reshape((1, wh_size[1]))
-            self.params.append(self.weight_context)
-        else:
-            self._if_context = False
-            self.context = Params().constant((1, wh_size[1]))
-
-    def apply(self, x_sequences, activate_type='tanh'):
-        # function for auto encoder, x_sequences is a src sequence with vocab rows and d_emb cols
+    def apply(self, sequences):
 
         def _step_forward(x_t, h_tm1):
-            # x_t is vector, h_tm1 is matrix
-            reset_t = self.reset_gate.apply(x_t, h_tm1[0])      # matrix
-            update_t = self.update_gate.apply(x_t, h_tm1[0])    # matrix
-
-            candidate_ht = T.dot(self.weight_xt_candidate, x_t) + \
-                T.dot(self.weight_htm1_candidate, (reset_t * h_tm1[0])[0]) + self.context
+            # x_t is a vector, h_tm1 is a matrix
+            reset_t = self.reset_gate.apply(x_t, h_tm1)
+            update_t = self.update_gate.apply(x_t, h_tm1)
+            candidate_ht = T.dot(self.weight_xt, x_t) + T.dot(self.weight_htm1, (reset_t * h_tm1))
 
             if self._if_bias:
                 candidate_ht += self.bias
+            if self._context is not None:
+                candidate_ht += self._context
 
-            candidate_ht = ActivationFunctions().apply(candidate_ht, activate_type)     # matrix
+            candidate_ht = ActivationFunctions().apply(candidate_ht, self._activate_type)
 
-            ht = (1-update_t) * h_tm1[0] + update_t * candidate_ht[0]   # matrix
+            ht = (1 - update_t) * h_tm1 + update_t * candidate_ht
 
-            return ht
+            return ht           # matrix in hidden size
 
-        hidden_layers, _ = theano.scan(fn=_step_forward, sequences=x_sequences, outputs_info=[self.hidden0])
+        hidden_layers, _ = theano.scan(fn=_step_forward, sequences=sequences, outputs_info=[self.hidden0])
+        return hidden_layers    # a tensor3 in n_step * hidden rows * hidden cols
 
-        return hidden_layers    # a matrix n_step * 1 * cols
+    def merge_out(self, sequences, w_mo_size, merge_out_size):
 
-    def merge_out(self, x_sequences, wm_size, activate_type='tanh'):
-        # function for prediction and auto decoder, x_sequences is the target sequence been generated
+        hidden = self.apply(sequences)      # tensor3
 
-        # hidden is a matrix, 1 * n_hid
-        # x_sequences is a matrix, x_sequences_size * n_emb
-        # context is a matrix, with 1 * n_hid
-        hidden = self.apply(x_sequences, activate_type)[-1]
-
-        if self._if_context:
-            combine = T.concatenate([hidden[0], x_sequences[-1], self.context[0]])      # vector
+        if self._context is not None:
+            context = T.alloc(self._context, T.shape(hidden)[0], T.shape(self._context)[0], T.shape(self._context)[1])
+            combine = T.concatenate([hidden, sequences, context], axis=1)       # tensor3
         else:
-            combine = T.concatenate([hidden[0], x_sequences[-1]])                       # vector
+            combine = T.concatenate([hidden, sequences], axis=1)                # tensor3
+        # return combine
 
-        self.weight_merge_out = Params().uniform(wm_size)
-        self.params += self.weight_merge_out
-
+        self.weight_merge_out = Params().uniform(w_mo_size)
+        self.params += [self.weight_merge_out]
         if self._if_bias:
-            self.bias_merge_out = Params().uniform((1, wm_size[0]))
-            self.params += self.bias_merge_out
+            self.bias_merge_out = Params().constant(merge_out_size)
+            self.params += [self.bias_merge_out]
 
         merge_out = theano.dot(self.weight_merge_out, combine)
+        # return merge_out
         if self._if_bias:
-            merge_out += self.bias_merge_out                    # matrix
+            merge_out += T.alloc(self.bias_merge_out, T.shape(hidden)[0], T.shape(self.bias_merge_out)[0], T.shape(self.bias_merge_out)[1])
 
-        # result without classification
-        return merge_out
+        return merge_out        # a tensor3 in n_step * out rows * out cols
 
-
-class ResetGate(object):
-
-    def __init__(self, wx_size, wh_size, bias_size=None, context=None):
-        self.weight_xt = Params().uniform(wx_size)
-        self.weight_htm1 = Params().uniform(wh_size)
-        self.params = [self.weight_xt, self.weight_htm1]
-
-        if bias_size is not None:
-            self._if_bias = True
-            self.bias = Params().constant(bias_size)
-            self.params.append(self.bias)
-        else:
-            self._if_bias = False
-
-        if context is not None:
-            self.weight_context = Params().uniform(wh_size)
-            self.context = T.dot(Params().new(context), self.weight_context)  # .reshape((1, wh_size[1]))
-            self.params.append(self.weight_context)
-        else:
-            self.context = Params().constant((1, wh_size[1]))
-
-    def apply(self, xt, htm1, activate_type='sigmoid'):
-        gate_output = T.dot(self.weight_xt, xt) + T.dot(self.weight_htm1, htm1) + self.context
-        if self._if_bias:
-            gate_output += self.bias
-
-        gate_output = ActivationFunctions().apply(gate_output, activate_type)
-
-        return gate_output      # matrix
-
-
-class UpdateGate(object):
-
-    def __init__(self, wx_size, wh_size, bias_size=None, context=None):
-        self.weight_xt = Params().uniform(wx_size)
-        self.weight_htm1 = Params().uniform(wh_size)
-        self.params = [self.weight_xt, self.weight_htm1]
-
-        if bias_size is not None:
-            self._if_bias = True
-            self.bias = Params().constant(bias_size)
-            self.params.append(self.bias)
-        else:
-            self._if_bias = False
-
-        if context is not None:
-            self.weight_context = Params().uniform(wh_size)
-            self.context = T.dot(Params().new(context), self.weight_context)  # .reshape((1, wh_size[1]))
-            self.params.append(self.weight_context)
-        else:
-            self.context = Params().constant((1, wh_size[1]))
-
-    def apply(self, xt, htm1, activate_type='sigmoid'):
-        gate_output = T.dot(self.weight_xt, xt) + T.dot(self.weight_htm1, htm1) + self.context
-        if self._if_bias:
-            gate_output += self.bias
-
-        gate_output = ActivationFunctions().apply(gate_output, activate_type)
-
-        return gate_output      # matrix
