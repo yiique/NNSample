@@ -29,6 +29,6 @@ class DNNUnit(object):
         if self._if_bias:
             unit_output += self.bias
 
-        unit_output = ActivationFunctions().apply(unit_input)
+        unit_output = ActivationFunctions().apply(unit_output)
 
         return unit_output

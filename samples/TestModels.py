@@ -4,7 +4,7 @@ import theano
 import theano.tensor as T
 
 import sys
-sys.path.append("..")
+sys.path.append("../")
 from models.DNNUnit import DNNUnit
 from models.Embedding import Embedding
 from models.GRUUnit import Gate, GRUUnit
@@ -80,8 +80,8 @@ class TestModels(object):
 if __name__ == "__main__":
     test_models = TestModels()
 
-    # test_models.test_dnn()
+    test_models.test_dnn()
     # test_models.test_emb()
     # test_models.test_gate()
-    test_models.test_gru()
+    # test_models.test_gru()
     # test_models.test_pooling()
