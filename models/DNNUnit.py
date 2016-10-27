@@ -11,22 +11,24 @@ from utils.Params import Params
 
 class DNNUnit(object):
 
-    def __init__(self, weight_size, bias_size=None):
-        self.weight = Params().uniform(weight_size)
+    def __init__(self, input_size, output_size, if_bias=True, activate_type='sigmoid'):
+        if input_size[1] != output_size[1]:
+            print "WARNING IN DNNUNIT: YOUR INPUT COLUMNS IS NOT EQUAL WITH OUTPUT COLUMNS!"
 
-        if bias_size:
-            self._if_bias = True
-            self.bias = Params().constant(bias_size)
-            self.params = [self.weight, self.bias]
-        else:
-            self._if_bias = False
-            self.params = [self.weight]
+        self._if_bias = if_bias
+        self._activate_type = activate_type
 
-    def apply(self, layer_input, activate_type='sigmoid'):
-        layer_output = T.dot(self.weight, layer_input)
+        self.weight = Params().uniform((output_size[0], input_size[0]))
+        self.params = [self.weight]
         if self._if_bias:
-            layer_output += self.bias
+            self.bias = Params().constant(output_size)
+            self.params += [self.bias]
 
-        layer_output = ActivationFunctions().apply(layer_output, activate_type)
+    def apply(self, unit_input):
+        unit_output = T.dot(self.weight, unit_input)
+        if self._if_bias:
+            unit_output += self.bias
 
-        return layer_output
+        unit_output = ActivationFunctions().apply(unit_output)
+
+        return unit_output
